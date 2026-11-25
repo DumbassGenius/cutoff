@@ -22,3 +22,17 @@ a.deepEqual(L.extractJSON('Sure: {"queries":["a","b"]} done').queries,["a","b"])
 const r = L.rankFeed([{id:1,channelId:"x",publishedAt:"2026-11-25T10:00:00Z"},{id:2,channelId:"y",publishedAt:"2026-11-24T10:00:00Z"}],{y:3});
 a.equal(r[0].id,2);
 console.log("all tests pass");
+// ---- timer ----
+{
+  const now = at(20,0).getTime();
+  const T = { setAt: now, end: now + 30*60000 };
+  a.equal(L.timerState(null,"06:00",now),"none");
+  a.equal(L.timerState(T,"06:00",now+60000),"running");
+  a.equal(L.timerState(T,"06:00",now+31*60000),"done");          // stays blocking after it ends
+  a.equal(L.timerState(T,"06:00",at(7,0).getTime()+86400000),"none"); // cleared after next morning reset
+  a.equal(L.effectiveDeadline("23:00","06:00",T,new Date(now)), T.end);      // timer earlier than bedtime
+  const late = { setAt: at(22,50).getTime(), end: at(22,50).getTime()+60*60000 };
+  a.equal(L.effectiveDeadline("23:00","06:00",late,at(22,50)), at(23,0).getTime()); // bedtime earlier
+  a.equal(L.effectiveDeadline("23:00","06:00",null,at(20,0)), at(23,0).getTime());
+  console.log("timer tests pass");
+}

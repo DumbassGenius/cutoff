@@ -15,6 +15,28 @@
     return d.getTime();
   }
 
+  // First morning reset strictly after time `t` (ms).
+  function nextMorning(morning, t) {
+    const m = parseHM(morning), d = new Date(t);
+    d.setHours(Math.floor(m / 60), m % 60, 0, 0);
+    if (d.getTime() <= t) d.setDate(d.getDate() + 1);
+    return d.getTime();
+  }
+
+  // Timer state relative to now: "none" | "running" | "done".
+  // A finished timer keeps blocking until the next morning reset after it was set,
+  // so letting it run out never unlocks everything; only a new timer does.
+  function timerState(timer, morning, nowMs = Date.now()) {
+    if (!timer || nowMs >= nextMorning(morning, timer.setAt)) return "none";
+    return nowMs < timer.end ? "running" : "done";
+  }
+
+  // Bedtime deadline, capped by the timer when one applies.
+  function effectiveDeadline(cutoff, morning, timer, now = new Date()) {
+    const b = deadline(cutoff, morning, now);
+    return timerState(timer, morning, now.getTime()) === "none" ? b : Math.min(b, timer.end);
+  }
+
   // "PT1H2M3S" -> 3723 ; "P1DT2H" -> 93600 ; "P0D" -> 0
   function parseISODuration(s) {
     const m = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/.exec(s || "");
@@ -57,6 +79,6 @@
     return JSON.parse(m[0]);
   }
 
-  const api = { parseHM, deadline, parseISODuration, remainingSec, fits, fmtDur, fmtLeft, rankFeed, extractJSON };
+  const api = { parseHM, deadline, nextMorning, timerState, effectiveDeadline, parseISODuration, remainingSec, fits, fmtDur, fmtLeft, rankFeed, extractJSON };
   if (typeof module !== "undefined") module.exports = api; else root.Logic = api;
 })(this);

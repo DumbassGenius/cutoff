@@ -12,7 +12,14 @@ const D = load("cutoff.data", { scores: {}, names: {}, hidden: {}, liked: {}, pr
 const saveS = () => save("cutoff.settings", S);
 const saveD = () => save("cutoff.data", D);
 
-const dl = () => L.deadline(S.cutoff, S.morning);
+let T = null; // timer {setAt, end}
+try { T = JSON.parse(localStorage.getItem("cutoff.timer") || "null"); } catch {}
+const saveT = () => { try { localStorage.setItem("cutoff.timer", JSON.stringify(T)); } catch {} };
+const tState = () => L.timerState(T, S.morning);
+const dl = () => L.effectiveDeadline(S.cutoff, S.morning, T);
+// Which limit is in charge right now: the timer, or bedtime.
+const timerRules = () => tState() !== "none" && T.end <= L.deadline(S.cutoff, S.morning);
+const limitLabel = () => (timerRules() ? "your timer" : S.cutoff);
 
 // ---------- ui helpers ----------
 let toastT;
@@ -26,12 +33,51 @@ function show(v) {
   if (v === "subs") subsAuto();
 }
 
+let wasRunning = false, endArmed = 0;
 function tickClock() {
-  const left = dl() - Date.now();
-  $("clock").innerHTML = left <= 0
-    ? `Past cutoff<br>until <b>${esc(S.morning)}</b>`
-    : `Cutoff <b>${esc(S.cutoff)}</b><br>${esc(L.fmtLeft(left))} left`;
+  const now = Date.now(), st = tState(), bed = L.deadline(S.cutoff, S.morning);
+  const btn = $("timerBtn");
+  if (bed <= now) {
+    $("clock").innerHTML = `Past bedtime<br>until <b>${esc(S.morning)}</b>`;
+  } else if (st === "running") {
+    const left = Math.min(T.end, bed) - now;
+    $("clock").innerHTML = `<span class="count">${esc(L.fmtDur(left / 1000))}</span>` +
+      (bed < T.end ? `bedtime ${esc(S.cutoff)}` : "left");
+  } else if (st === "done") {
+    $("clock").innerHTML = `Timer's up<br>set a new one`;
+  } else {
+    $("clock").innerHTML = `Bedtime <b>${esc(S.cutoff)}</b><br>${esc(L.fmtLeft(bed - now))} left`;
+  }
+  btn.textContent = st === "running" ? (endArmed > now ? "Tap to end" : "End timer") : "Set timer";
+  btn.classList.toggle("ghost", st === "running");
+  // Timer just ran out while browsing (the player handles its own case).
+  if (wasRunning && st === "done" && !current) { renderAll(); timesUp(); }
+  wasRunning = st === "running";
 }
+
+function startTimer(mins) {
+  mins = Math.round(Number(mins));
+  if (!(mins >= 1 && mins <= 600)) { toast("Pick between 1 and 600 minutes."); return; }
+  const now = Date.now();
+  T = { setAt: now, end: now + mins * 60000 }; saveT();
+  $("timerModal").classList.remove("on");
+  const bed = L.deadline(S.cutoff, S.morning);
+  if (bed < T.end) toast(bed <= now ? `It's past bedtime until ${S.morning}.` : `Bedtime at ${S.cutoff} comes first.`);
+  tickClock(); renderAll();
+}
+
+$("timerBtn").addEventListener("click", () => {
+  if (tState() === "running") {
+    if (endArmed > Date.now()) { T.end = Date.now(); saveT(); endArmed = 0; wasRunning = false; renderAll(); tickClock(); return; }
+    endArmed = Date.now() + 3000; tickClock(); return;
+  }
+  const bed = L.deadline(S.cutoff, S.morning) - Date.now();
+  $("timerNote").textContent = bed > 0 ? `Bedtime at ${S.cutoff} still applies (${L.fmtLeft(bed)} away).` : `It's past bedtime until ${S.morning}.`;
+  $("timerModal").classList.add("on");
+});
+document.querySelectorAll(".presets button").forEach((b) => b.addEventListener("click", () => startTimer(b.dataset.m)));
+$("timerCustom").addEventListener("submit", (e) => { e.preventDefault(); startTimer($("timerMins").value); });
+$("timerCancel").addEventListener("click", () => $("timerModal").classList.remove("on"));
 
 // ---------- YouTube API ----------
 async function yt(path, params, token) {
@@ -135,8 +181,8 @@ function render(gridId) {
     </div>`;
   }).join("");
   if (!vids.length) grid.innerHTML = "";
-  else if (!shown.length) grid.innerHTML = `<div class="empty">Nothing here fits before ${esc(S.cutoff)}.</div>`;
-  note.textContent = late ? `${late} video${late > 1 ? "s" : ""} hidden because ${late > 1 ? "they'd" : "it'd"} run past ${S.cutoff}.` : "";
+  else if (!shown.length) grid.innerHTML = `<div class="empty">${tState() === "done" ? "Your timer's up. Set a new one to keep watching." : "Nothing here fits in the time you have left."}</div>`;
+  note.textContent = late ? `${late} video${late > 1 ? "s" : ""} hidden because ${late > 1 ? "they'd" : "it'd"} run past ${limitLabel()}.` : "";
 }
 const renderAll = () => Object.keys(lists).forEach(render);
 
@@ -220,10 +266,12 @@ function closePlayer() {
 $("playerBack").addEventListener("click", closePlayer);
 
 function timesUp() {
-  const past = dl() <= Date.now();
-  $("timesupMsg").textContent = past
-    ? `It's past ${S.cutoff}. Videos are back at ${S.morning}.`
-    : `That one would run past ${S.cutoff}.`;
+  const now = Date.now(), st = tState();
+  $("timesupMsg").textContent =
+    L.deadline(S.cutoff, S.morning) <= now ? `It's past ${S.cutoff}. Videos are back at ${S.morning}.`
+    : st === "done" ? "Your timer's up. Set a new one if you want to keep watching."
+    : st === "none" && !T ? "That one would run past your bedtime."
+    : `That one is longer than the time you have left.`;
   $("timesup").classList.add("on");
 }
 $("timesupOk").addEventListener("click", () => $("timesup").classList.remove("on"));
