@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#15131f">
+<title>Cutoff</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#15131f;--panel:#1f1c2e;--line:#2f2b44;--ink:#ece9f5;--dim:#9e98b8;--moon:#f3e6bf;--warn:#ff8f7a;--ok:#9fe0b4}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Outfit,system-ui,sans-serif}
+button,input,textarea{font:inherit;color:inherit}
+header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding:12px 16px 0}
+.top{display:flex;align-items:center;gap:12px;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:20px}
+.brand svg{width:26px;height:26px}
+#clock{font-size:14px;color:var(--dim);text-align:right;white-space:nowrap}
+#clock b{color:var(--moon);font-weight:600}
+nav{display:flex;gap:4px;margin-top:10px;overflow-x:auto}
+nav button{flex:none;background:none;border:0;border-bottom:2px solid transparent;padding:10px 14px;color:var(--dim);cursor:pointer;min-height:44px}
+nav button.on{color:var(--ink);border-color:var(--moon)}
+main{max-width:900px;margin:0 auto;padding:16px}
+.view{display:none}.view.on{display:block}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+textarea,input[type=text],input[type=password],input[type=search],input[type=time]{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;width:100%;font-size:16px}
+textarea{min-height:84px;resize:vertical}
+input:focus,textarea:focus,button:focus-visible{outline:2px solid var(--moon);outline-offset:2px}
+.btn{background:var(--moon);color:#1a1726;border:0;border-radius:999px;padding:11px 20px;font-weight:600;cursor:pointer;min-height:44px}
+.btn.ghost{background:none;color:var(--ink);border:1px solid var(--line)}
+.btn:disabled{opacity:.5;cursor:default}
+.status{color:var(--dim);font-size:14px;margin:12px 2px;min-height:1.5em}
+.status.err{color:var(--warn)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;margin-top:8px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
+.thumb{position:relative;aspect-ratio:16/9;background:#000;cursor:pointer;border:0;padding:0;display:block;width:100%}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.dur{position:absolute;right:8px;bottom:8px;background:rgba(0,0,0,.8);border-radius:6px;padding:1px 7px;font-size:13px;white-space:nowrap}
+.bar{position:absolute;left:0;bottom:0;height:3px;background:var(--warn)}
+.meta{padding:10px 12px 4px;flex:1}
+.title{font-weight:600;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer}
+.chan{color:var(--dim);font-size:14px;margin-top:2px}
+.why{color:var(--moon);font-size:13px;margin-top:4px;opacity:.85}
+.acts{display:flex;justify-content:flex-end;gap:2px;padding:0 6px 6px}
+.acts button{background:none;border:0;color:var(--dim);width:44px;height:40px;border-radius:10px;cursor:pointer}
+.acts button:hover{background:var(--line);color:var(--ink)}
+.acts svg{width:20px;height:20px}
+.acts button.up{color:var(--ok)}
+.hidden-note{color:var(--dim);font-size:14px;margin-top:14px}
+.empty{color:var(--dim);text-align:center;padding:40px 10px}
+#playerView{position:fixed;inset:0;z-index:20;background:#000;display:none;flex-direction:column}
+#playerView.on{display:flex}
+#playerBar{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg)}
+#playerTitle{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+#playerLeft{color:var(--dim);font-size:14px;white-space:nowrap}
+#playerWrap{flex:1;position:relative}
+#playerWrap iframe,#player{position:absolute;inset:0;width:100%;height:100%;border:0}
+.set{display:grid;gap:18px;max-width:560px}
+.set label{display:grid;gap:6px;font-weight:600}
+.set small{color:var(--dim);font-weight:400}
+.set .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.check{display:flex!important;align-items:center;gap:10px;grid-template-columns:none}
+.check input{width:22px;height:22px}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--moon);color:#1a1726;padding:12px 18px;border-radius:12px;font-weight:600;display:none;z-index:30;max-width:90vw;text-align:center}
+.timesup{position:fixed;inset:0;z-index:25;background:var(--bg);display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:20px}
+.timesup.on{display:flex}
+.timesup h2{font-size:42px;margin:0}
+</style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="15" fill="#2f2b44"/><path d="M20 6a11 11 0 1 0 6 19A9 9 0 0 1 20 6z" fill="#f3e6bf"/></svg>
+      Cutoff
+    </div>
+    <div id="clock"></div>
+  </div>
+  <nav>
+    <button data-v="mood" class="on">Mood</button>
+    <button data-v="subs">Subscriptions</button>
+    <button data-v="search">Search</button>
+    <button data-v="settings">Settings</button>
+  </nav>
+</header>
+
+<main>
+  <section id="mood" class="view on">
+    <textarea id="moodText" placeholder="What do you feel like watching? e.g. something chill about black holes, not too mathy"></textarea>
+    <div class="row" style="margin-top:10px"><button class="btn" id="moodGo">Find videos</button></div>
+    <div class="status" id="moodStatus"></div>
+    <div class="grid" id="moodGrid"></div>
+    <div class="hidden-note" id="moodHidden"></div>
+  </section>
+
+  <section id="subs" class="view">
+    <div class="row">
+      <button class="btn" id="subsRefresh">Refresh feed</button>
+      <button class="btn ghost" id="subsConnect">Connect Google account</button>
+    </div>
+    <div class="status" id="subsStatus"></div>
+    <div class="grid" id="subsGrid"></div>
+    <div class="hidden-note" id="subsHidden"></div>
+  </section>
+
+  <section id="search" class="view">
+    <form id="searchForm" class="row">
+      <input type="search" id="searchText" placeholder="Search YouTube" style="flex:1 1 220px">
+      <button class="btn">Search</button>
+    </form>
+    <div class="status" id="searchStatus"></div>
+    <div class="grid" id="searchGrid"></div>
+    <div class="hidden-note" id="searchHidden"></div>
+  </section>
+
+  <section id="settings" class="view">
+    <form class="set" id="setForm">
+      <div class="two">
+        <label>Cutoff<input type="time" id="sCutoff"></label>
+        <label>Morning reset<input type="time" id="sMorning"></label>
+      </div>
+      <label class="check"><input type="checkbox" id="sNoShorts"> Hide videos under 3 minutes (Shorts)</label>
+      <label>YouTube API key<input type="password" id="sYtKey" autocomplete="off"><small>Needed for everything.</small></label>
+      <label>Google OAuth client ID<input type="text" id="sClientId" autocomplete="off"><small>Only for the Subscriptions tab. Looks like 1234…apps.googleusercontent.com</small></label>
+      <label>Anthropic API key<input type="password" id="sAnthKey" autocomplete="off"><small>Only for the Mood tab. Starts with sk-ant-</small></label>
+      <div class="row"><button class="btn">Save</button><button type="button" class="btn ghost" id="sTest">Test keys</button><button type="button" class="btn ghost" id="sReset">Reset likes &amp; history</button></div>
+      <div class="status" id="setStatus"></div>
+      <small style="color:var(--dim)">Keys are stored only in this browser on this device.</small>
+    </form>
+  </section>
+</main>
+
+<div id="playerView">
+  <div id="playerBar">
+    <button class="btn ghost" id="playerBack">Back</button>
+    <div id="playerTitle"></div>
+    <div id="playerLeft"></div>
+  </div>
+  <div id="playerWrap"><div id="player"></div></div>
+</div>
+
+<div class="timesup" id="timesup">
+  <h2>Time's up</h2>
+  <p style="color:var(--dim)" id="timesupMsg"></p>
+  <button class="btn" id="timesupOk">OK</button>
+</div>
+
+<div id="toast"></div>
+
+<script src="logic.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
