@@ -118,7 +118,7 @@ async function searchIds(q, n = 25) {
 }
 
 // ---------- Claude ----------
-async function claude(system, user, maxTokens = 700) {
+async function callClaude(body) {
   if (!S.anthKey) throw new Error("Add your Anthropic API key in Settings.");
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -126,11 +126,28 @@ async function claude(system, user, maxTokens = 700) {
       "content-type": "application/json", "x-api-key": S.anthKey,
       "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true",
     },
-    body: JSON.stringify({ model: "claude-haiku-5-5", max_tokens: maxTokens, system, messages: [{ role: "user", content: user }] }),
+    body: JSON.stringify({ model: "claude-haiku-5-5", ...body }),
   });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error?.message || "Claude error " + r.status);
+  return j;
+}
+
+async function claude(system, user, maxTokens = 700) {
+  const j = await callClaude({ max_tokens: maxTokens, system, messages: [{ role: "user", content: user }] });
   return (j.content || []).map((c) => c.text || "").join("");
+}
+
+// Forces Claude to answer through a tool, so the result is always a valid object matching `schema`.
+async function claudeJSON(system, user, schema, maxTokens = 1000) {
+  const j = await callClaude({
+    max_tokens: maxTokens, system, messages: [{ role: "user", content: user }],
+    tools: [{ name: "answer", description: "Return the answer.", input_schema: schema }],
+    tool_choice: { type: "tool", name: "answer" },
+  });
+  const use = (j.content || []).find((c) => c.type === "tool_use");
+  if (use && use.input) return use.input;
+  return L.extractJSON((j.content || []).map((c) => c.text || "").join(""));
 }
 
 function tasteLines() {
@@ -285,10 +302,11 @@ $("moodGo").addEventListener("click", async () => {
   const btn = $("moodGo"); btn.disabled = true;
   try {
     status("moodStatus", "Asking Claude what to look for…");
-    const q = L.extractJSON(await claude(
-      "You turn a person's mood into YouTube searches. Reply with JSON only, no prose.",
-      `Mood: ${text}\nTime available: about ${mins} minutes.\n${tasteLines()}\n\nGive 3 varied, specific YouTube search queries likely to find videos they'd enjoy that fit in the time. JSON: {"queries":["...","...","..."]}`,
-      300));
+    const q = await claudeJSON(
+      "You turn a person's mood into YouTube searches.",
+      `Mood: ${text}\nTime available: about ${mins} minutes.\n${tasteLines()}\n\nGive 3 varied, specific YouTube search queries likely to find videos they'd enjoy that fit in the time.`,
+      { type: "object", properties: { queries: { type: "array", items: { type: "string" } } }, required: ["queries"] },
+      400);
     const queries = (q.queries || []).slice(0, 3).map(String);
     status("moodStatus", "Searching: " + queries.join(" · "));
     const ids = (await Promise.all(queries.map((x) => searchIds(x)))).flat();
@@ -297,9 +315,10 @@ $("moodGo").addEventListener("click", async () => {
     if (cands.length > 12) {
       status("moodStatus", "Picking the best ones…");
       const lines = cands.slice(0, 60).map((v, i) => `${i}. ${v.title} — ${v.channel} — ${Math.round(L.remainingSec(v.dur, D.progress[v.id]) / 60)} min`).join("\n");
-      const r = L.extractJSON(await claude(
-        "You pick YouTube videos for a person. Reply with JSON only, no prose.",
-        `Mood: ${text}\n${tasteLines()}\n\nCandidates:\n${lines}\n\nPick up to 12 that best match the mood, varied, avoiding clickbait and near-duplicates. For each give a reason of at most 8 words. JSON: {"picks":[{"n":0,"why":"..."}]}`));
+      const r = await claudeJSON(
+        "You pick YouTube videos for a person.",
+        `Mood: ${text}\n${tasteLines()}\n\nCandidates:\n${lines}\n\nPick up to 12 that best match the mood, varied, avoiding clickbait and near-duplicates. For each give the candidate number n and a reason of at most 8 words.`,
+        { type: "object", properties: { picks: { type: "array", items: { type: "object", properties: { n: { type: "integer" }, why: { type: "string" } }, required: ["n", "why"] } } }, required: ["picks"] });
       const picked = (r.picks || []).map((p) => cands[p.n] && { ...cands[p.n], why: String(p.why || "") }).filter(Boolean);
       vids = [...new Map(picked.map((v) => [v.id, v])).values()].concat(vids.filter((v) => visible(v) === "late"));
     }
